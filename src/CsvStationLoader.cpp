@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <fstream>
+#include <limits>
 #include <sstream>
 
 namespace bikeviz {
@@ -16,42 +17,54 @@ std::string trim(const std::string& s) {
     return s.substr(begin, end - begin);
 }
 
-bool looksNumeric(const std::string& s) {
+// Parses `s` as a base-10 integer, accepting the value only if the
+// *entire* string was consumed by the conversion.
+//
+// std::stoi silently ignores trailing garbage after a valid prefix, so
+// std::stoi("12.3") returns 12 rather than failing, and std::stoi("12abc")
+// returns 12 as well. Checking `pos == s.size()` is what makes this a
+// real validator instead of a best-effort prefix parse.
+bool parseInt(const std::string& s, int& out) {
     if (s.empty()) return false;
-    std::size_t i = 0;
-    if (s[i] == '+' || s[i] == '-') ++i;
-    if (i >= s.size()) return false;
-    bool sawDigit = false;
-    for (; i < s.size(); ++i) {
-        if (std::isdigit(static_cast<unsigned char>(s[i]))) {
-            sawDigit = true;
-        } else if (s[i] == '.') {
-            continue;
-        } else {
+    try {
+        std::size_t pos = 0;
+        const long value = std::stol(s, &pos);
+        if (pos != s.size()) return false;
+        if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
             return false;
         }
-    }
-    return sawDigit;
-}
-
-bool parseInt(const std::string& s, int& out) {
-    if (!looksNumeric(s)) return false;
-    try {
-        out = std::stoi(s);
+        out = static_cast<int>(value);
         return true;
     } catch (...) {
         return false;
     }
 }
 
+// Same full-consumption discipline for floating-point fields. This is
+// what rejects malformed values like "1..2" or "41.9.5" that a naive
+// "digits and at most one dot" character check would wave through:
+// std::stod("1..2") happily returns 1.0 and stops at the second dot,
+// which the old looksNumeric()-then-stod() pairing could not detect
+// because looksNumeric() never re-checked what stod() actually consumed.
 bool parseDouble(const std::string& s, double& out) {
-    if (!looksNumeric(s)) return false;
+    if (s.empty()) return false;
     try {
-        out = std::stod(s);
+        std::size_t pos = 0;
+        const double value = std::stod(s, &pos);
+        if (pos != s.size()) return false;
+        out = value;
         return true;
     } catch (...) {
         return false;
     }
+}
+
+// Header-row detection only needs to know "does this look like a number
+// at all", so it reuses the same strict parser rather than keeping a
+// second, looser numeric check that could disagree with it.
+bool isFullyNumeric(const std::string& s) {
+    double unused;
+    return parseDouble(s, unused);
 }
 
 }  // namespace
@@ -123,7 +136,7 @@ CsvLoadResult loadStationsFromCsv(const std::string& path) {
 
         if (!checkedForHeader) {
             checkedForHeader = true;
-            if (!fields.empty() && !looksNumeric(trim(fields[0]))) {
+            if (!fields.empty() && !isFullyNumeric(trim(fields[0]))) {
                 result.warnings.push_back("line " + std::to_string(lineNumber) +
                                            ": detected header row, skipped");
                 continue;

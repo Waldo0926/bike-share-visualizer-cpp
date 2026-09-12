@@ -103,6 +103,28 @@ void testLoaderDistinguishesEmptyFileFromMissingFile() {
     std::remove(path.c_str());
 }
 
+void testLoaderRejectsPartiallyNumericFields() {
+    // std::stoi/std::stod silently accept a valid numeric *prefix* and
+    // ignore the rest ("12.3" -> 12, "123abc" -> 123, "1..2" -> 1.0),
+    // which would let a corrupted export slip through as a valid row
+    // with a silently truncated value. Each row below has exactly one
+    // field that is a numeric prefix followed by garbage, and all three
+    // must be rejected outright rather than half-parsed.
+    const std::string csv =
+        "1,Station A,Addr A,12.3,10,In Service,41.0,-87.0\n"    // totalDocks "12.3" is not a valid integer
+        "2,Station B,Addr B,10,10,In Service,1..2,-87.0\n"      // latitude "1..2" is not a valid double
+        "3,Station C,Addr C,123abc,10,In Service,41.0,-87.0\n"  // totalDocks "123abc" is not a valid integer
+        "4,Station D,Addr D,10,10,In Service,41.0,-87.0\n";     // control row: must still load
+    const std::string path = writeTempFile("bikeviz_numeric_edge_test.csv", csv);
+
+    bikeviz::CsvLoadResult result = bikeviz::loadStationsFromCsv(path);
+    require(result.stations.size() == 1,
+            "only the fully well-formed row should load, got " + std::to_string(result.stations.size()));
+    require(result.stations[0].id == "4", "the surviving station should be the control row");
+    require(result.warnings.size() == 3, "each malformed row should produce exactly one warning");
+    std::remove(path.c_str());
+}
+
 // ---- MapProjection ------------------------------------------------------
 
 void testProjectionMatchesOriginalCalibration() {
@@ -244,6 +266,110 @@ void testBitmapClipsOutOfBoundsMarkers() {
     require(image.width() == 4 && image.height() == 3, "out-of-bounds marker must be clipped, not crash");
 }
 
+// A minimal hand-built BMP file header, used to exercise the malformed
+// and hostile-input paths that the bundled real map.bmp never triggers.
+// Mirrors the little-endian field layout BitmapImage::loadFromFile reads,
+// but lives here independently so the test does not just call the same
+// helper functions it is meant to be checking.
+void appendU16(std::vector<std::uint8_t>& buf, std::uint16_t v) {
+    buf.push_back(static_cast<std::uint8_t>(v & 0xFF));
+    buf.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
+}
+
+void appendU32(std::vector<std::uint8_t>& buf, std::uint32_t v) {
+    buf.push_back(static_cast<std::uint8_t>(v & 0xFF));
+    buf.push_back(static_cast<std::uint8_t>((v >> 8) & 0xFF));
+    buf.push_back(static_cast<std::uint8_t>((v >> 16) & 0xFF));
+    buf.push_back(static_cast<std::uint8_t>((v >> 24) & 0xFF));
+}
+
+std::vector<std::uint8_t> buildBmpHeader(std::int32_t width, std::int32_t height, std::uint16_t bpp,
+                                          std::uint32_t dataOffset, std::uint32_t compression = 0) {
+    std::vector<std::uint8_t> buf;
+    buf.push_back('B');
+    buf.push_back('M');
+    appendU32(buf, 0);  // file size field; the loader does not rely on it
+    appendU32(buf, 0);  // reserved
+    appendU32(buf, dataOffset);
+    appendU32(buf, 40);  // BITMAPINFOHEADER size
+    appendU32(buf, static_cast<std::uint32_t>(width));
+    appendU32(buf, static_cast<std::uint32_t>(height));
+    appendU16(buf, 1);  // colour planes
+    appendU16(buf, bpp);
+    appendU32(buf, compression);
+    appendU32(buf, 0);  // image size, unused when uncompressed
+    appendU32(buf, 0);  // x pixels per metre
+    appendU32(buf, 0);  // y pixels per metre
+    appendU32(buf, 0);  // colours used
+    appendU32(buf, 0);  // important colours
+    return buf;
+}
+
+void writeBytesToFile(const std::string& path, const std::vector<std::uint8_t>& bytes) {
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+}
+
+bool loadingThrows(const std::string& path) {
+    try {
+        bikeviz::BitmapImage::loadFromFile(path);
+        return false;
+    } catch (const std::exception&) {
+        return true;
+    }
+}
+
+void testBitmapRejectsTruncatedPixelData() {
+    // A well-formed 4x3, 24bpp header claims 54 + 3*12 = 90 bytes are
+    // needed, but the file is cut off right after the header. Reading
+    // pixel data from this file without a length check would walk past
+    // the end of the buffer.
+    const std::vector<std::uint8_t> bytes = buildBmpHeader(4, 3, 24, /*dataOffset=*/54);
+    const std::string path = tempPath("bikeviz_truncated.bmp");
+    writeBytesToFile(path, bytes);
+    require(loadingThrows(path), "a BMP truncated before its pixel data must throw, not read out of bounds");
+    std::remove(path.c_str());
+}
+
+void testBitmapRejectsTruncatedPalette() {
+    // An 8bpp bitmap needs a full 256-entry, 4-byte-per-entry (1024-byte)
+    // BGRA palette between the header and dataOffset. This file only
+    // provides 100 bytes after the header, far short of that.
+    std::vector<std::uint8_t> bytes = buildBmpHeader(4, 3, 8, /*dataOffset=*/54 + 100);
+    bytes.resize(54 + 100, 0);
+    const std::string path = tempPath("bikeviz_truncated_palette.bmp");
+    writeBytesToFile(path, bytes);
+    require(loadingThrows(path), "a BMP with a truncated colour palette must throw, not read out of bounds");
+    std::remove(path.c_str());
+}
+
+void testBitmapRejectsAbsurdDimensions() {
+    // A corrupt or deliberately hostile header can claim close to 2^31
+    // pixels per side. This must be rejected before any pixel buffer is
+    // allocated, not after exhausting available memory.
+    const std::vector<std::uint8_t> bytes = buildBmpHeader(2000000000, 2000000000, 24, /*dataOffset=*/54);
+    const std::string path = tempPath("bikeviz_absurd_dims.bmp");
+    writeBytesToFile(path, bytes);
+    require(loadingThrows(path), "absurd claimed dimensions must be rejected outright");
+    std::remove(path.c_str());
+}
+
+void testBitmapRejectsUnsupportedHeaderSize() {
+    // Only the 40-byte BITMAPINFOHEADER layout is understood. A file
+    // announcing a different header size (e.g. the older 12-byte
+    // BITMAPCOREHEADER) must be rejected rather than have its width,
+    // height, and bpp fields misread from the wrong offsets.
+    std::vector<std::uint8_t> bytes = buildBmpHeader(4, 3, 24, /*dataOffset=*/54);
+    bytes[14] = 12;  // headerSize low byte, overriding the 40 written above
+    bytes[15] = 0;
+    bytes[16] = 0;
+    bytes[17] = 0;
+    const std::string path = tempPath("bikeviz_bad_header_size.bmp");
+    writeBytesToFile(path, bytes);
+    require(loadingThrows(path), "an unsupported BMP header size must be rejected");
+    std::remove(path.c_str());
+}
+
 // ---- Integration tests against the real bundled dataset -------------------
 //
 // These run on the actual 588-station Chicago CSV and the original
@@ -336,6 +462,7 @@ int main() {
         {"loader skips malformed rows", testLoaderSkipsMalformedRows},
         {"loader reports missing file", testLoaderReportsMissingFile},
         {"loader distinguishes empty file from missing file", testLoaderDistinguishesEmptyFileFromMissingFile},
+        {"loader rejects partially numeric fields", testLoaderRejectsPartiallyNumericFields},
         {"projection matches original calibration", testProjectionMatchesOriginalCalibration},
         {"projection is configurable", testProjectionIsConfigurable},
         {"findById and findByName", testFindByIdAndName},
@@ -346,6 +473,10 @@ int main() {
         {"trip simulator gives up on impossible dataset", testTripSimulatorGivesUpOnImpossibleDataset},
         {"bitmap round trip", testBitmapRoundTrip},
         {"bitmap clips out-of-bounds markers", testBitmapClipsOutOfBoundsMarkers},
+        {"bitmap rejects truncated pixel data", testBitmapRejectsTruncatedPixelData},
+        {"bitmap rejects truncated palette", testBitmapRejectsTruncatedPalette},
+        {"bitmap rejects absurd dimensions", testBitmapRejectsAbsurdDimensions},
+        {"bitmap rejects unsupported header size", testBitmapRejectsUnsupportedHeaderSize},
         {"real dataset loads expected totals", testRealDatasetLoadsExpectedTotals},
         {"real map renders every station", testRealMapRendersEveryStation},
     };

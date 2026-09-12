@@ -23,3 +23,28 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+  sanitizers:
+    # AddressSanitizer + UndefinedBehaviorSanitizer catch out-of-bounds
+    # reads and undefined-behaviour arithmetic that a plain Release build
+    # cannot, which matters here specifically because BitmapImage parses
+    # untrusted binary file headers. Runs on Linux only: both sanitizers
+    # are first-class on GCC/Clang, and one platform is enough to catch
+    # what this build mode is for without tripling CI time.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: >
+          cmake -S . -B build-sanitized -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+      - name: Build
+        run: cmake --build build-sanitized
+
+      - name: Test
+        run: ctest --test-dir build-sanitized --output-on-failure

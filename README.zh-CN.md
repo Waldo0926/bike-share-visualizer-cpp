@@ -76,6 +76,8 @@ ctest --test-dir build --output-on-failure
 
 需要支持 C++17 的编译器和 CMake 3.16 以上版本，没有第三方依赖。
 
+在 Windows 上，Visual Studio 生成器会把编译出的可执行文件放进一个按配置区分的子目录，而不是直接放在 `build/` 下，所以下面命令行示例里的路径要相应改成 `build\Release\bikeviz.exe`（调试版则是 `build\Debug\...`），而不是 `build/bikeviz`。
+
 ## 使用命令行工具
 
 ```
@@ -107,4 +109,5 @@ docs/              设计说明、重构记录、截图
 
 ## 许可证
 
-MIT — 详见 [LICENSE](LICENSE)。
+MIT — 详见 [LICENSE](LICENSE)。数据集、地图图片和旧课设工程的来源说明见
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（英文）。

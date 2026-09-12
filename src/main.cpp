@@ -1,8 +1,8 @@
 #include <algorithm>
-#include <cstdlib>
-#include <ctime>
+#include <chrono>
 #include <iostream>
 #include <optional>
+#include <random>
 #include <stdexcept>
 #include <string>
 
@@ -24,6 +24,8 @@ void printUsage() {
         "  --find-id <id>      Print details for a station by exact ID\n"
         "  --find-name <name>  Print details for a station by exact name\n"
         "  --simulate          Simulate a random two-station trip\n"
+        "  --seed <value>      Seed the trip simulator's RNG (with --simulate)\n"
+        "                      for a reproducible run; default is time-based\n"
         "  --map <path>        Source map bitmap (e.g. legacy/assets/map.bmp)\n"
         "  --out <path>        Render all stations onto --map and save here\n";
 }
@@ -45,6 +47,7 @@ int run(int argc, char** argv) {
     std::optional<std::string> findName;
     std::optional<std::string> mapPath;
     std::optional<std::string> outPath;
+    std::optional<unsigned long> seed;
     bool simulate = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -68,6 +71,15 @@ int run(int argc, char** argv) {
             outPath = next();
         } else if (arg == "--simulate") {
             simulate = true;
+        } else if (arg == "--seed") {
+            const std::string value = next();
+            try {
+                std::size_t pos = 0;
+                seed = std::stoul(value, &pos);
+                if (pos != value.size()) throw std::invalid_argument("trailing characters");
+            } catch (const std::exception&) {
+                throw std::runtime_error("--seed expects a non-negative integer, got '" + value + "'");
+            }
         } else if (arg == "--help" || arg == "-h") {
             printUsage();
             return 0;
@@ -126,11 +138,21 @@ int run(int argc, char** argv) {
     }
 
     if (simulate) {
-        std::srand(static_cast<unsigned>(std::time(nullptr)));
-        auto randomIndex = [](std::size_t upperBound) {
-            return static_cast<std::size_t>(std::rand()) % upperBound;
+        // std::rand() % n is biased towards the low end of the range
+        // whenever n does not evenly divide RAND_MAX, and its quality as
+        // a source of randomness is implementation-defined. std::mt19937
+        // seeded explicitly (rather than through the global std::rand
+        // state) avoids both problems and, with --seed, makes a run
+        // reproducible for debugging or demonstration.
+        const unsigned long usedSeed =
+            seed.value_or(static_cast<unsigned long>(
+                std::chrono::high_resolution_clock::now().time_since_epoch().count()));
+        std::mt19937 rng(static_cast<std::mt19937::result_type>(usedSeed));
+        auto randomIndex = [&rng](std::size_t upperBound) -> std::size_t {
+            std::uniform_int_distribution<std::size_t> dist(0, upperBound - 1);
+            return dist(rng);
         };
-        std::cout << "\nSimulating a random trip:\n";
+        std::cout << "\nSimulating a random trip (seed " << usedSeed << "):\n";
         if (auto trip = bikeviz::pickRandomTripEndpoints(repository, projection, randomIndex)) {
             const double distance = bikeviz::estimateTripDistance(trip->start, trip->end, projection);
             std::cout << "  from: " << trip->start.name << " (" << trip->start.id << ")\n"

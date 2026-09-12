@@ -100,6 +100,11 @@ ctest --test-dir build --output-on-failure
 
 Requires a C++17 compiler and CMake 3.16+. No third-party dependencies.
 
+On Windows, the Visual Studio generator places the built executable under a
+per-configuration folder rather than directly in `build/`, so the CLI
+examples below become `build\Release\bikeviz.exe` (or `build\Debug\...`
+for a debug build) instead of `build/bikeviz`.
+
 ## Using the CLI
 
 ```
@@ -131,4 +136,6 @@ docs/              design notes, modernisation write-up, screenshots
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The bundled dataset, map image, and legacy
+project carry their own notes in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
