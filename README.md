@@ -1,5 +1,9 @@
 # Bike-Share Visual Monitor — Modern C++
 
+[![Coursework](https://img.shields.io/badge/Type-Coursework_Rebuild-2563eb?style=for-the-badge)](#)
+[![Tech](https://img.shields.io/badge/C%2B%2B17-CMake-7c3aed?style=for-the-badge)](#)
+[![License](https://img.shields.io/badge/License-MIT-16a34a?style=for-the-badge)](LICENSE)
+
 [![C++ CI](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml)
 
 [中文说明](README.zh-CN.md)
