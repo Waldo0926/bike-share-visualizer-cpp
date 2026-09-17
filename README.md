@@ -6,7 +6,7 @@
 
 [![C++ CI](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml)
 
-[中文说明](README.zh-CN.md)
+**English** · [中文](README.zh-CN.md)
 
 A command-line tool for loading, querying and visualising a city
 bike-share network, written in modern C++17.
