@@ -1,4 +1,4 @@
-# Bike-Share Visual Monitor — 现代 C++ 重构版
+# Bike-Share Visual Monitor（现代 C++ 重构版）
 
 [![类型](https://img.shields.io/badge/%E7%B1%BB%E5%9E%8B-%E8%AF%BE%E7%A8%8B%E9%87%8D%E6%9E%84-2563eb?style=for-the-badge)](#)
 [![技术](https://img.shields.io/badge/%E6%8A%80%E6%9C%AF-C%2B%2B17-7c3aed?style=for-the-badge)](#)
@@ -7,7 +7,7 @@
 
 [![C++ CI](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml/badge.svg)](https://github.com/Waldo0926/bike-share-visualizer-cpp/actions/workflows/ci.yml)
 
-[English](README.md)
+[English](README.md) · **中文**
 
 一个用现代 C++17 编写的命令行工具，用来加载、查询和可视化一个城市共享单车网络的站点数据。
 
@@ -114,5 +114,4 @@ docs/              设计说明、重构记录、截图
 
 ## 许可证
 
-MIT — 详见 [LICENSE](LICENSE)。数据集、地图图片和旧课设工程的来源说明见
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（英文）。
+MIT，详见 [LICENSE](LICENSE)。数据集、地图图片和旧课设工程的来源说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)（英文）。
