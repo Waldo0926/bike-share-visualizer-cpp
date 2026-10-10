@@ -1,4 +1,4 @@
-# Bike-Share Visual Monitor — Modern C++
+# Bike-Share Visual Monitor (Modern C++)
 
 [![Coursework](https://img.shields.io/badge/Type-Coursework_Rebuild-2563eb?style=for-the-badge)](#)
 [![Tech](https://img.shields.io/badge/C%2B%2B17-CMake-7c3aed?style=for-the-badge)](#)
@@ -140,6 +140,6 @@ docs/              design notes, modernisation write-up, screenshots
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The bundled dataset, map image, and legacy
+MIT, see [LICENSE](LICENSE). The bundled dataset, map image, and legacy
 project carry their own notes in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
